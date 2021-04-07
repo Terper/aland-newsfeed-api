@@ -1,6 +1,25 @@
 import express from 'express'
-import { load } from 'rss-to-json'
 import cors from 'cors'
+import { parseStringPromise, processors } from "xml2js"
+import fetch from 'node-fetch'
+
+const options = {
+  trim: true,
+  explicitArray: false,
+  normalize: true,
+  async: true,
+  tagNameProcessors: [processors.stripPrefix]
+}
+
+async function xmlFetch (url: string) {
+  try {
+    const response = await (await fetch(url)).text()
+    return await parseStringPromise(response, options)
+  } catch (error) {
+    console.log(error)
+  }
+}
+
 
 const app = express()
 const port = 3000
@@ -12,27 +31,28 @@ app.use(cors({
 }))
 
 app.get("/alandstidningen", async (req, res) => {
-  const data = await load("https://www.alandstidningen.ax/rss/allt")
-  res.send(data)
+  const data = (await xmlFetch("https://www.alandstidningen.ax/rss/allt")).rss.channel.item
+  res.json({items: data})
 })
 app.get("/alandsradio", async (req, res) => {
-  const data = await load("https://alandsradio.ax/rss")
-  res.send(data)
+  const data = (await xmlFetch("https://alandsradio.ax/rss")).rss.channel.item
+  res.json({items: data})
 })
 app.get("/nyaaland", async (req, res) => {
-  const data = await load("https://www.nyan.ax/feed/")
-  res.send(data)
+  const data = (await xmlFetch("https://www.nyan.ax/feed")).rss.channel.item
+  res.json({items: data})
 })
 
 app.get("/", async (req, res) => {
-  const al = await load("https://www.alandstidningen.ax/rss/allt")
-  const ar = await load("https://alandsradio.ax/rss")
-  const ny = await load("https://www.nyan.ax/feed/")
-  const collection = al.items.concat(ar.items.concat(ny.items))
-  const sortedCollection = collection.sort((a: any,b: any) => {
-    return b.published - a.published
+  let at: any, ar: any, ny: any
+  at = (await xmlFetch("https://www.alandstidningen.ax/rss/allt")).rss.channel.item
+  ar = (await xmlFetch("https://alandsradio.ax/rss")).rss.channel.item
+  ny = (await xmlFetch("https://www.nyan.ax/feed")).rss.channel.item
+  const complete = at.concat(ar.concat(ny))
+  const sorted = complete.sort((a:any, b:any) => {
+    return (+ new Date(b.pubDate) - (+ new Date(a.pubDate)))
   })
-  res.send({items: sortedCollection})
+  res.json({items: sorted})
 })
 
 app.listen(port, () => {
